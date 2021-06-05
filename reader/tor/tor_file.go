@@ -1,6 +1,6 @@
-package main
+package tor
 
-type SWTORFile struct {
+type TorFile struct {
 	HeaderSize        uint32
 	Offset            uint64
 	CompressedSize    uint32
@@ -10,12 +10,5 @@ type SWTORFile struct {
 	FileID            uint64
 	Checksum          uint32
 	CompressionMethod uint16
-	CRC               uint32 // Same as Checksum
-}
-
-type HashData struct {
-	pH       string
-	sH       string
-	filename string
-	crc      string
+	CRC               uint32 // Same as logger.Checksum
 }
