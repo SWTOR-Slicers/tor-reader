@@ -1,27 +1,24 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"compress/zlib"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/SWTOR-Slicers/tor-reader/logger"
+	"github.com/SWTOR-Slicers/tor-reader/reader/hash"
+	"github.com/SWTOR-Slicers/tor-reader/reader/tor"
 	"github.com/gammazero/workerpool"
 )
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
 
 func zlipDecompress(buff []byte) ([]byte, error) {
 	b := bytes.NewReader(buff)
@@ -37,115 +34,72 @@ func zlipDecompress(buff []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func writeFile(data []byte, dir string) {
+func writeFile(data []byte, dir string, outputDir string) {
 	if dir == "" {
 		return
 	}
-	path := "./output/" + dir
+	path := outputDir + dir
 
 	strings.Split(path, "/")
 
 	os.MkdirAll(filepath.Dir(path), os.ModePerm)
 	destination, err := os.Create(path)
-	check(err)
+	logger.Check(err)
 
 	destination.Write(data)
 	destination.Close()
 }
 
-func readHashes() map[uint64]HashData {
-	hash := map[uint64]HashData{}
-
-	file, err := os.Open("hashes_filename.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		obj := strings.Split(scanner.Text(), "#")
-
-		pH, sH, filePath, crc := obj[0], obj[1], obj[2], obj[3]
-
-		fileID, err := strconv.ParseUint(pH+sH, 16, 64)
-		check(err)
-		hash[uint64(fileID)] = HashData{pH, sH, filePath, crc}
-	}
-	return hash
-
-}
-
 func main() {
-	hashes := readHashes()
+	var torFiles []string
 
-	/*
-		buff := []byte{120, 156, 202, 72, 205, 201, 201, 215, 81, 40, 207,
-			47, 202, 73, 225, 2, 4, 0, 0, 255, 255, 33, 231, 4, 147}
-
-		a, err := zlipDecompress(buff)
-
+	hashPath := ""
+	outputDir := ""
+	if len(os.Args) >= 4 {
+		fmt.Println(os.Args[1])
+		err := json.Unmarshal([]byte(os.Args[1]), &torFiles)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
 		}
-		fmt.Print(string(a))
-	*/
-	torName := ""
-
-	fmt.Println(os.Args)
-
-	if len(os.Args) >= 2 {
-		torName = os.Args[1]
+		fmt.Println(torFiles)
+		outputDir = os.Args[2]
+		hashPath = os.Args[3]
 	}
-	if torName == "" {
+	if len(torFiles) == 0 || outputDir == "" || hashPath == "" {
 		return
 	}
-	f, err := os.Open(torName)
 
-	defer f.Close()
-	check(err)
-	reader := SWTORReader{*f}
-	magicNumber := reader.ReadUInt32()
+	hashes := hash.Read(hashPath)
 
-	if magicNumber != 0x50594D {
-		fmt.Println("Not MYP File")
-	}
+	if len(torFiles) == 1 {
+		torName := torFiles[0]
+		torFiles = []string{}
 
-	f.Seek(12, 0)
+		f, _ := os.Open(torName)
+		fi, _ := f.Stat()
 
-	fileTableOffset := reader.ReadUInt64()
+		switch mode := fi.Mode(); {
+		case mode.IsDir():
+			files, _ := ioutil.ReadDir(torName)
 
-	data := make([]SWTORFile, 0, 0)
+			for _, f := range files {
+				file := filepath.Join(torName, f.Name())
 
-	namedFiles := 0
+				fileMode := f.Mode()
 
-	for fileTableOffset != 0 {
-		f.Seek(int64(fileTableOffset), 0)
-		numFiles := int32(reader.ReadUInt32())
-		fileTableOffset = reader.ReadUInt64()
-		namedFiles += int(numFiles)
-		for i := int32(0); i < numFiles; i++ {
-			offset := reader.ReadUInt64()
-			if offset == 0 {
-				f.Seek(26, 1)
-				continue
+				if fileMode.IsRegular() {
+					if filepath.Ext(file) == ".tor" {
+						torFiles = append(torFiles, file)
+					}
+				}
 			}
-			info := SWTORFile{}
-			info.HeaderSize = reader.ReadUInt32()
-			info.Offset = offset
-			info.CompressedSize = reader.ReadUInt32()
-			info.UnCompressedSize = reader.ReadUInt32()
-			current_position, _ := f.Seek(0, 1)
-			info.SecondaryHash = reader.ReadUInt32()
-			info.PrimaryHash = reader.ReadUInt32()
-			f.Seek(current_position, 0)
-			info.FileID = reader.ReadUInt64()
-			info.Checksum = reader.ReadUInt32()
-			info.CompressionMethod = reader.ReadUInt16()
-			info.CRC = info.Checksum
-			data = append(data, info)
+		case mode.IsRegular():
+			torFiles = append(torFiles, torName)
 		}
 	}
+
+	data := tor.ReadAll(torFiles)
+
 	pool := workerpool.New(runtime.NumCPU())
 
 	filesNoHash := 0
@@ -153,6 +107,7 @@ func main() {
 	filesAttempted := 0
 	filesSuccessful := 0
 	start := time.Now()
+
 	log.Printf("using %d workerpools to instantiate server instances", runtime.NumCPU())
 	for _, data := range data {
 		if hashData, ok := hashes[data.FileID]; ok {
@@ -160,22 +115,21 @@ func main() {
 			hashData := hashData
 			data := data
 			pool.Submit(func() {
-				f, _ := os.Open(torName)
+				f, _ := os.Open(data.TorFile)
 				defer f.Close()
 				f.Seek(int64(data.Offset+uint64(data.HeaderSize)), 0)
 				fileData := make([]byte, data.CompressedSize)
 				f.Read(fileData)
 				if data.CompressionMethod == 0 {
-					writeFile(fileData, hashData.filename)
+					writeFile(fileData, hashData.Filename, outputDir)
 					filesSuccessful++
 				} else {
 					fileData, err := zlipDecompress(fileData)
-					check(err)
-					writeFile(fileData, hashData.filename)
+					logger.Check(err)
+					writeFile(fileData, hashData.Filename, outputDir)
 					filesSuccessful++
 				}
 				fmt.Println(filesSuccessful, filesAttempted)
-				//fmt.Println(1)
 			})
 		} else {
 			filesNoHash++
@@ -186,6 +140,5 @@ func main() {
 	diff := time.Now().Sub(start)
 	log.Println("duration", fmt.Sprintf("%s", diff))
 
-	fmt.Println(namedFiles, filesAttempted, filesNoHash)
-
+	fmt.Println(filesAttempted, filesNoHash)
 }
