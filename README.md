@@ -15,4 +15,12 @@ Put the hashlist in the same folder as the executeable
   Needs to be written
 
 
+
+# How to build
+ If you run windows you can use the .bat just double click it.
  
+ 
+ 
+ # Credits
+ StarLight - Wrote the base and prototype.
+ Tormak - Wrote part of the support for multi tors
