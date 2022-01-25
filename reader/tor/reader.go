@@ -50,8 +50,8 @@ func Read(torName string) []TorFile {
 func read(torName string, tor *torStruct) {
 	f, err := os.Open(torName)
 
-	defer f.Close()
 	logger.Check(err)
+	defer f.Close()
 	reader := reader.SWTORReader{File: f}
 	magicNumber := reader.ReadUInt32()
 
