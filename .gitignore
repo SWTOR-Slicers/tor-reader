@@ -4,3 +4,6 @@ tor-reader-mac
 tor-reader-windows.exe
 go.sum
 cmd.txt
+hashes_filename.txt
+output/*
+*.tor
