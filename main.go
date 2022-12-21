@@ -16,7 +16,22 @@ import (
 	"github.com/SWTOR-Slicers/tor-reader/reader/hash"
 	"github.com/SWTOR-Slicers/tor-reader/reader/tor"
 	"github.com/gammazero/workerpool"
+	"github.com/klauspost/compress/zstd"
 )
+
+func zstdDecompress(buff []byte) ([]byte, error) {
+	r, err := zstd.NewReader(bytes.NewReader(buff))
+	if err != nil {
+		fmt.Print(err)
+		return nil, err
+	}
+	defer r.Close()
+
+	var out bytes.Buffer
+	io.Copy(&out, r)
+
+	return out.Bytes(), nil
+}
 
 func zlipDecompress(buff []byte) ([]byte, error) {
 	b := bytes.NewReader(buff)
@@ -85,7 +100,8 @@ func main() {
 					writeFile(fileData, hashData.Filename)
 					filesSuccessful++
 				} else {
-					fileData, err := zlipDecompress(fileData)
+					fileData, err := zstdDecompress(fileData)
+					log.Println(hashData.Filename)
 					logger.Check(err)
 					writeFile(fileData, hashData.Filename)
 					filesSuccessful++

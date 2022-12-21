@@ -3,3 +3,6 @@ tor-reader-linux
 tor-reader-mac
 tor-reader-windows.exe
 go.sum
+hashes_filename.txt
+*.tor
+output/*
