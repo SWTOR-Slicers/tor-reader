@@ -2,6 +2,7 @@ package tor
 
 type TorFile struct {
 	HeaderSize        uint32
+	Version           uint32
 	Offset            uint64
 	CompressedSize    uint32
 	UnCompressedSize  uint32

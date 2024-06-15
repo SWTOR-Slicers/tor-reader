@@ -50,14 +50,17 @@ func Read(torName string) []TorFile {
 func read(torName string, tor *torStruct) {
 	f, err := os.Open(torName)
 
-	defer f.Close()
 	logger.Check(err)
+	defer f.Close()
 	reader := reader.SWTORReader{File: f}
 	magicNumber := reader.ReadUInt32()
 
 	if magicNumber != 0x50594D {
 		fmt.Println("Not MYP File")
 	}
+
+	version := reader.ReadUInt32()
+	fmt.Print("Version: " + fmt.Sprint(version) + "\n")
 
 	f.Seek(12, 0)
 
@@ -78,6 +81,7 @@ func read(torName string, tor *torStruct) {
 			}
 			info := TorFile{}
 			info.HeaderSize = reader.ReadUInt32()
+			info.Version = reader.ReadUInt32()
 			info.Offset = offset
 			info.CompressedSize = reader.ReadUInt32()
 			info.UnCompressedSize = reader.ReadUInt32()
