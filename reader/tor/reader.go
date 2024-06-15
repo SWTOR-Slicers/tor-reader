@@ -81,7 +81,7 @@ func read(torName string, tor *torStruct) {
 			}
 			info := TorFile{}
 			info.HeaderSize = reader.ReadUInt32()
-			info.Version = reader.ReadUInt32()
+			info.Version = version
 			info.Offset = offset
 			info.CompressedSize = reader.ReadUInt32()
 			info.UnCompressedSize = reader.ReadUInt32()
