@@ -7,3 +7,4 @@ cmd.txt
 hashes_filename.txt
 output/*
 *.tor
+cmd/gui/tor-reader-gui.exe
